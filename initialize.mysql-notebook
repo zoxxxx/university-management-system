@@ -1,0 +1,2188 @@
+{
+    "type": "MySQLNotebook",
+    "version": "1.0",
+    "caption": "DB Notebook",
+    "content": "\\about\nCREATE DATABASE Student_Manage\nUSE Student_Manage\n-- 创建学院表\nCREATE TABLE College (\n    CollegeID INT AUTO_INCREMENT PRIMARY KEY,\n    CollegeName VARCHAR(255) NOT NULL\n);\n\n-- 创建专业表\nCREATE TABLE Major (\n    MajorID INT AUTO_INCREMENT PRIMARY KEY,\n    MajorName VARCHAR(255) NOT NULL,\n    CollegeID INT,\n    FOREIGN KEY (CollegeID) REFERENCES College(CollegeID)\n        ON DELETE SET NULL ON UPDATE CASCADE\n);\n\n\n-- 创建学生表\nCREATE TABLE Student (\n    StudentID VARCHAR(255) PRIMARY KEY,\n    Name VARCHAR(255) NOT NULL,\n    Gender VARCHAR(10),\n    DateOfBirth DATE,\n    ContactInfo VARCHAR(255),\n    EnrollmentYear INT,\n    MajorID INT,\n    FOREIGN KEY (MajorID) REFERENCES Major(MajorID)\n        ON DELETE SET NULL ON UPDATE CASCADE\n);\n\n-- 创建课程表\nCREATE TABLE Course (\n    CourseID INT AUTO_INCREMENT PRIMARY KEY,\n    CourseName VARCHAR(255) NOT NULL,\n    Credits INT,\n    OfferingCollegeID INT,\n    FOREIGN KEY (OfferingCollegeID) REFERENCES College(CollegeID)\n        ON DELETE SET NULL ON UPDATE CASCADE\n);\n\n-- 创建专业变更表\nCREATE TABLE MajorChange (\n    ChangeID INT AUTO_INCREMENT PRIMARY KEY,\n    StudentID VARCHAR(255),\n    ChangeDate DATE,\n    FOREIGN KEY (StudentID) REFERENCES Student(StudentID)\n        ON DELETE CASCADE ON UPDATE CASCADE\n);\n-- 创建奖惩记录表\nCREATE TABLE AwardPunishment (\n    APID INT AUTO_INCREMENT PRIMARY KEY,\n    StudentID VARCHAR(255),\n    Type VARCHAR(255),\n    Description TEXT,\n    Date DATE,\n    FOREIGN KEY (StudentID) REFERENCES Student(StudentID)\n        ON DELETE CASCADE ON UPDATE CASCADE\n);\n\n-- 创建选课表\nCREATE TABLE Enrollment (\n    EnrollmentID INT AUTO_INCREMENT PRIMARY KEY,\n    StudentID VARCHAR(255),\n    CourseID INT,\n    Semester VARCHAR(255),\n    Grade VARCHAR(10),\n    FOREIGN KEY (StudentID) REFERENCES Student(StudentID)\n        ON DELETE CASCADE ON UPDATE CASCADE,\n    FOREIGN KEY (CourseID) REFERENCES Course(CourseID)\n        ON DELETE CASCADE ON UPDATE CASCADE,\n    UNIQUE (StudentID, CourseID)  -- 添加唯一约束\n);\n\nCREATE TABLE Account (\n    UserID INT AUTO_INCREMENT PRIMARY KEY,\n    Username VARCHAR(255) NOT NULL UNIQUE,\n    Password VARCHAR(255) NOT NULL,\n    Role ENUM('student', 'admin') NOT NULL,\n    StudentID VARCHAR(255) NULL,\n    FOREIGN KEY (StudentID) REFERENCES Student(StudentID)\n);\n\nINSERT INTO account (username, password, role) VALUES ('root', '99adc231b045331e514a516b4b7680f588e3823213abe901738bc3ad67b2f6fcb3c64efb93d18002588d3ccc1a49efbae1ce20cb43df36b38651f11fa75678e8', 'admin');\nSELECT * FROM account\nSELECT password, role FROM account WHERE username = 'root'\nDROP TABLE student\nALTER TABLE Student\nADD MajorID INT;\n\nALTER TABLE Student\nADD CONSTRAINT fk_student_major\nFOREIGN KEY (MajorID) REFERENCES Major(MajorID)\nON DELETE SET NULL\nON UPDATE CASCADE;\n\nALTER TABLE Student MODIFY MajorID INT NOT NULL;\nSELECT CONSTRAINT_NAME \nFROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE \nWHERE TABLE_NAME = 'Account' \n      AND COLUMN_NAME = 'StudentID' \n\nALTER TABLE Account DROP FOREIGN KEY account_ibfk_1;\n\nALTER TABLE Account\nADD CONSTRAINT account_ibfk_1\nFOREIGN KEY (StudentID) REFERENCES Student(StudentID)\nON DELETE CASCADE;\n\nALTER TABLE Student DROP FOREIGN KEY fk_student_major;\n\nALTER TABLE Student\nADD CONSTRAINT fk_student_major\nFOREIGN KEY (MajorID) REFERENCES Major(MajorID)\nON DELETE CASCADE;\n\n-- 事务用来变更专业\nDELIMITER //\n\nCREATE PROCEDURE ChangeStudentMajor(\n    IN student_id VARCHAR(255),\n    IN new_major_id INT,\n    IN change_date DATE\n)\nBEGIN\n    DECLARE old_major_id INT;\n    DECLARE exit handler for sqlexception\n    BEGIN\n        ROLLBACK;\n        RESIGNAL;\n    END;\n\n    START TRANSACTION;\n\n    SELECT MajorID INTO old_major_id FROM Student WHERE StudentID = student_id;\n\n    UPDATE Student SET MajorID = new_major_id WHERE StudentID = student_id;\n\n    INSERT INTO MajorChange (StudentID, OldMajorID, NewMajorID, ChangeDate)\n    VALUES (student_id, old_major_id, new_major_id, change_date);\n\n    COMMIT;\nEND;\n\n//\nDELIMITER ;\n\n\nALTER TABLE MajorChange\nADD COLUMN OldMajorID INT,\nADD COLUMN NewMajorID INT,\nADD CONSTRAINT fk_old_major_id FOREIGN KEY (OldMajorID) REFERENCES Major(MajorID) ON DELETE SET NULL ON UPDATE CASCADE,\nADD CONSTRAINT fk_new_major_id FOREIGN KEY (NewMajorID) REFERENCES Major(MajorID) ON DELETE SET NULL ON UPDATE CASCADE;\n\nCALL ChangeStudentMajor('PB21114514', 2, '2023-01-01');\nSELECT CONSTRAINT_NAME\nFROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS\nWHERE TABLE_SCHEMA = 'student_manage'\n  AND TABLE_NAME = 'Enrollment'\n  AND CONSTRAINT_TYPE = 'UNIQUE';\n\nSELECT DISTINCT CONSTRAINT_NAME\nFROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS\nWHERE TABLE_SCHEMA = 'student_manage' -- 替换成你的数据库名\n  AND TABLE_NAME = 'Enrollment'\n  AND CONSTRAINT_TYPE = 'UNIQUE';\n\n\nALTER TABLE Enrollment\nDROP INDEX `Course`\nSHOW INDEX FROM Enrollment;\n\nALTER TABLE Enrollment\nDROP INDEX `StudentID`;\n\nSHOW CREATE TABLE Enrollment\nSELECT CONSTRAINT_NAME\nFROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE\nWHERE TABLE_SCHEMA = 'student_manage' -- 替换成你的数据库名\n  AND TABLE_NAME = 'Enrollment'\n  AND REFERENCED_TABLE_NAME IS NOT NULL;\n\nSELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME\nFROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE\nWHERE TABLE_SCHEMA = 'student_manage' -- 替换成你的数据库名\n  AND TABLE_NAME = 'Enrollment'\n  AND REFERENCED_TABLE_NAME IS NOT NULL;\n\nALTER TABLE Enrollment DROP FOREIGN KEY `enrollment_ibfk_1`\nALTER TABLE Enrollment DROP INDEX `StudentID`;\n\nALTER TABLE Enrollment\nADD CONSTRAINT `fk_StudentID`\nFOREIGN KEY (`StudentID`) REFERENCES Student(`StudentID`) ON DELETE CASCADE ON UPDATE CASCADE;\n\nDELIMITER //\n\nCREATE PROCEDURE RegisterCourse(\n    IN p_student_id VARCHAR(255),\n    IN p_course_id INT,\n    IN p_semester VARCHAR(255)\n)\nBEGIN\n    -- 检查学生是否已经在同一学期选了同一门课程\n    DECLARE v_exists INT;\n    SELECT COUNT(*) INTO v_exists FROM Enrollment\n    WHERE StudentID = p_student_id AND CourseID = p_course_id AND Semester = p_semester;\n\n    IF v_exists = 0 THEN\n        -- 如果没有重复记录，则插入新的选课记录，并将成绩初始化为 NULL\n        INSERT INTO Enrollment (StudentID, CourseID, Semester, Grade)\n        VALUES (p_student_id, p_course_id, p_semester, NULL);\n    ELSE\n        -- 如果已存在，抛出错误信息\n        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'This course has already been registered by the student for the given semester.';\n    END IF;\nEND;\n\n//\nDELIMITER ;\n\n\nDELIMITER //\n\nCREATE FUNCTION CalculateWeightedAverageGrade(student_id VARCHAR(255)) \nRETURNS DECIMAL(5,2)\nREADS SQL DATA \nBEGIN\n    DECLARE total_weighted_scores DECIMAL(10,2);\n    DECLARE total_credits DECIMAL(10,2);\n    DECLARE weighted_average DECIMAL(5,2);\n\n    SET total_weighted_scores = 0;\n    SET total_credits = 0;\n\n    SELECT \n        SUM(CAST(Grade AS DECIMAL(5,2)) * Credits), \n        SUM(Credits)\n    INTO \n        total_weighted_scores, \n        total_credits\n    FROM Enrollment\n    JOIN Course ON Enrollment.CourseID = Course.CourseID\n    WHERE Enrollment.StudentID = student_id AND Enrollment.Grade IS NOT NULL AND Enrollment.Grade != '';\n\n    IF total_credits > 0 THEN\n        SET weighted_average = total_weighted_scores / total_credits;\n    ELSE\n        SET weighted_average = 0;\n    END IF;\n\n    RETURN weighted_average;\nEND;\n\n//\nDELIMITER ;\n\n\n\n\nALTER TABLE Major\nADD COLUMN StudentCount INT DEFAULT 0;\n\nUPDATE Major\nSET StudentCount = (\n    SELECT COUNT(*)\n    FROM Student\n    WHERE Student.MajorID = Major.MajorID\n);\n\nDELIMITER //\n\nCREATE TRIGGER UpdateMajorCount\nAFTER UPDATE ON Student\nFOR EACH ROW\nBEGIN\n    IF OLD.MajorID <> NEW.MajorID THEN\n        UPDATE Major\n        SET StudentCount = StudentCount - 1\n        WHERE MajorID = OLD.MajorID;\n\n        UPDATE Major\n        SET StudentCount = StudentCount + 1\n        WHERE MajorID = NEW.MajorID;\n    END IF;\nEND;\n\n//\nDELIMITER ;\n\nALTER TABLE Student\nADD COLUMN Photo BLOB;\n\nALTER TABLE Student\nMODIFY COLUMN Photo LONGBLOB;\n\nDELIMITER //\n\nCREATE TRIGGER DecrementMajorCount\nAFTER DELETE ON Student\nFOR EACH ROW\nBEGIN\n    UPDATE Major\n    SET StudentCount = StudentCount - 1\n    WHERE MajorID = OLD.MajorID;\nEND;\n\n//\nDELIMITER ;\n\nDELIMITER //\n\nCREATE TRIGGER IncrementMajorCount\nAFTER INSERT ON Student\nFOR EACH ROW\nBEGIN\n    UPDATE Major\n    SET StudentCount = StudentCount + 1\n    WHERE MajorID = NEW.MajorID;\nEND;\n\n//\nDELIMITER ;\n\n\n",
+    "options": {
+        "tabSize": 4,
+        "insertSpaces": true,
+        "indentSize": 4,
+        "defaultEOL": "CRLF",
+        "trimAutoWhitespace": true
+    },
+    "viewState": {
+        "cursorState": [
+            {
+                "inSelectionMode": false,
+                "selectionStart": {
+                    "lineNumber": 326,
+                    "column": 1
+                },
+                "position": {
+                    "lineNumber": 326,
+                    "column": 1
+                }
+            }
+        ],
+        "viewState": {
+            "scrollLeft": 0,
+            "firstPosition": {
+                "lineNumber": 286,
+                "column": 1
+            },
+            "firstPositionDeltaTop": -19
+        },
+        "contributionsState": {
+            "editor.contrib.folding": {},
+            "editor.contrib.wordHighlighter": false
+        }
+    },
+    "contexts": [
+        {
+            "state": {
+                "start": 1,
+                "end": 1,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 2,
+                            "content": "Welcome to the MySQL Shell - DB Notebook.\n\nPress Ctrl+Enter to execute the code block.\n\nExecute \\sql to switch to SQL, \\js to JavaScript and \\ts to TypeScript mode.\nExecute \\help or \\? for help;",
+                            "language": "ansi"
+                        }
+                    ]
+                },
+                "currentHeight": 119,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 6
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 2,
+                "end": 2,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "cecc6a3e-7694-4c8f-ca41-5f95fb0584b1",
+                            "content": "OK, 1 row affected in 12.511ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 30
+                        },
+                        "contentStart": 0,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 3,
+                "end": 3,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "a36d10cc-1ff8-4062-da8b-25768301bc3e",
+                            "content": "OK, 0 records retrieved in 0.999ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 18
+                        },
+                        "contentStart": 0,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 4,
+                "end": 9,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (1050): ClassicSession.run_sql: Table 'college' already exists",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 118
+                        },
+                        "contentStart": 9,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 118,
+                            "length": 1
+                        },
+                        "contentStart": 117,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 10,
+                "end": 19,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "bf990d50-5ec7-4649-daff-9e1d948fbcc0",
+                            "content": "OK, 0 records retrieved in 64.703ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 235
+                        },
+                        "contentStart": 9,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 235,
+                            "length": 2
+                        },
+                        "contentStart": 234,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 20,
+                "end": 32,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (1050): ClassicSession.run_sql: Table 'student' already exists",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 320
+                        },
+                        "contentStart": 9,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 320,
+                            "length": 1
+                        },
+                        "contentStart": 319,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 33,
+                "end": 42,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (1050): ClassicSession.run_sql: Table 'course' already exists",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 271
+                        },
+                        "contentStart": 9,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 271,
+                            "length": 1
+                        },
+                        "contentStart": 270,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 43,
+                "end": 50,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "9b8fa724-37ab-4fbf-d617-ff486854e42a",
+                            "content": "OK, 0 records retrieved in 67.638ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 236
+                        },
+                        "contentStart": 11,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 236,
+                            "length": 0
+                        },
+                        "contentStart": 235,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 51,
+                "end": 61,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (1050): ClassicSession.run_sql: Table 'awardpunishment' already exists",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 275
+                        },
+                        "contentStart": 11,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 275,
+                            "length": 1
+                        },
+                        "contentStart": 274,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 62,
+                "end": 75,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "4b5741b3-2b1b-4baa-c0b0-ecec4f4f95e5",
+                            "content": "OK, 0 records retrieved in 78.556ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 429
+                        },
+                        "contentStart": 9,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 429,
+                            "length": 1
+                        },
+                        "contentStart": 428,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 76,
+                "end": 84,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "09038f79-54e9-4a37-c079-dfabb547547a",
+                            "content": "OK, 0 records retrieved in 103.203ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 282
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 282,
+                            "length": 1
+                        },
+                        "contentStart": 281,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 85,
+                "end": 86,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "601acdd7-1e25-4dc2-9d52-622139de6146"
+                    ]
+                },
+                "currentHeight": 36,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 204
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 204,
+                            "length": 22
+                        },
+                        "contentStart": 205,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "601acdd7-1e25-4dc2-9d52-622139de6146",
+                    "rows": [
+                        {
+                            "0": 1,
+                            "1": "root",
+                            "2": "99adc231b045331e514a516b4b7680f588e3823213abe901738bc3ad67b2f6fcb3c64efb93d18002588d3ccc1a49efbae1ce20cb43df36b38651f11fa75678e8",
+                            "3": "admin",
+                            "4": null
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "UserID",
+                            "field": "0",
+                            "dataType": {
+                                "type": 4
+                            }
+                        },
+                        {
+                            "title": "Username",
+                            "field": "1",
+                            "dataType": {
+                                "type": 17
+                            }
+                        },
+                        {
+                            "title": "Password",
+                            "field": "2",
+                            "dataType": {
+                                "type": 17
+                            }
+                        },
+                        {
+                            "title": "Role",
+                            "field": "3",
+                            "dataType": {
+                                "type": 46
+                            }
+                        },
+                        {
+                            "title": "StudentID",
+                            "field": "4",
+                            "dataType": {
+                                "type": 17
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 1 record retrieved in 1.013ms"
+                    },
+                    "totalRowCount": 1,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 1,
+                    "sql": "\nSELECT * FROM account"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 87,
+                "end": 87,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "d9d52e14-979f-460b-bf7c-49e74fb6ed79"
+                    ]
+                },
+                "currentHeight": 91,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 58
+                        },
+                        "contentStart": 0,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "d9d52e14-979f-460b-bf7c-49e74fb6ed79",
+                    "rows": [
+                        {
+                            "0": "99adc231b045331e514a516b4b7680f588e3823213abe901738bc3ad67b2f6fcb3c64efb93d18002588d3ccc1a49efbae1ce20cb43df36b38651f11fa75678e8",
+                            "1": "admin"
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "password",
+                            "field": "0",
+                            "dataType": {
+                                "type": 17
+                            }
+                        },
+                        {
+                            "title": "role",
+                            "field": "1",
+                            "dataType": {
+                                "type": 46
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 1 record retrieved in 1.005ms"
+                    },
+                    "totalRowCount": 1,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 0,
+                    "sql": "SELECT password, role FROM account WHERE username = 'root'"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 88,
+                "end": 88,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (3730): ClassicSession.run_sql: Cannot drop table 'student' referenced by a foreign key constraint 'account_ibfk_1' on table 'account'.",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 18
+                        },
+                        "contentStart": 1,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 89,
+                "end": 91,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "c6405d28-05ab-4b12-87eb-916ff6c7b6e4",
+                            "content": "OK, 0 records retrieved in 45.44ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 36
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 36,
+                            "length": 1
+                        },
+                        "contentStart": 35,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 92,
+                "end": 97,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (1826): ClassicSession.run_sql: Duplicate foreign key constraint name 'fk_student_major'",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 137
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 137,
+                            "length": 1
+                        },
+                        "contentStart": 136,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 98,
+                "end": 98,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "54a4f0bd-4ff9-4901-b627-3e54e9a8a3f1",
+                            "content": "OK, 0 records retrieved in 127.615ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 48
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 99,
+                "end": 103,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "ffe64a92-ff5f-451a-92ec-c7915f79a5ed"
+                    ]
+                },
+                "currentHeight": 36,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 133
+                        },
+                        "contentStart": 0,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "ffe64a92-ff5f-451a-92ec-c7915f79a5ed",
+                    "rows": [
+                        {
+                            "0": "account_ibfk_1"
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "CONSTRAINT_NAME",
+                            "field": "0",
+                            "dataType": {
+                                "type": 17
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 1 record retrieved in 3.998ms"
+                    },
+                    "totalRowCount": 1,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 0,
+                    "sql": "SELECT CONSTRAINT_NAME \nFROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE \nWHERE TABLE_NAME = 'Account' \n      AND COLUMN_NAME = 'StudentID' \n"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 104,
+                "end": 105,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "83ce3709-7c04-414b-d880-3e0666f93312",
+                            "content": "OK, 0 records retrieved in 8.31793212890625s"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 52
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 52,
+                            "length": 1
+                        },
+                        "contentStart": 51,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 106,
+                "end": 110,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "85937a48-67ef-4f0c-9bab-dc992230aca5",
+                            "content": "OK, 2 rows affected in 148.532ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 122
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 122,
+                            "length": 1
+                        },
+                        "contentStart": 121,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 111,
+                "end": 112,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "6d69da65-58bd-4b76-b121-8e8ed1f459a3",
+                            "content": "OK, 0 records retrieved in 2.3482744693756104s"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 54
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 54,
+                            "length": 1
+                        },
+                        "contentStart": 53,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 113,
+                "end": 117,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "5149259c-9131-4cfc-e1fa-a0b96bfd238e",
+                            "content": "OK, 3 rows affected in 137.597ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 118
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 118,
+                            "length": 1
+                        },
+                        "contentStart": 117,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 118,
+                "end": 149,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "55460f51-4909-4dfe-8ee2-31d0f10c1094",
+                            "content": "OK, 0 records retrieved in 1.511ms"
+                        },
+                        {
+                            "type": 4,
+                            "index": 2,
+                            "resultId": "db77917a-a48e-4bc9-a568-9478f2fddadb",
+                            "content": "OK, 0 records retrieved in 18.124ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 12
+                        },
+                        "contentStart": -1,
+                        "state": 3
+                    },
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 12,
+                            "length": 12
+                        },
+                        "contentStart": 12,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 24,
+                            "length": 601
+                        },
+                        "contentStart": 26,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 625,
+                            "length": 12
+                        },
+                        "contentStart": 626,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 637,
+                            "length": 2
+                        },
+                        "contentStart": 636,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 150,
+                "end": 155,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "fa6badcb-df70-4b57-a75f-8bba64f5d077",
+                            "content": "OK, 0 records retrieved in 2.390810251235962s"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 317
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 317,
+                            "length": 1
+                        },
+                        "contentStart": 316,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 156,
+                "end": 156,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "ad34d782-eee9-458a-8352-eb9ffdf70d8a",
+                            "content": "OK, 0 records retrieved in 18.792ms",
+                            "subIndex": 0
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 55
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 157,
+                "end": 162,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "eb6cb270-1f4c-465c-d8d1-049a38f411a4"
+                    ]
+                },
+                "currentHeight": 36,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 168
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 168,
+                            "length": 1
+                        },
+                        "contentStart": 167,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "eb6cb270-1f4c-465c-d8d1-049a38f411a4",
+                    "rows": [
+                        {
+                            "0": "StudentID"
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "CONSTRAINT_NAME",
+                            "field": "0",
+                            "dataType": {
+                                "type": 17
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 1 record retrieved in 0.999ms"
+                    },
+                    "totalRowCount": 1,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 0,
+                    "sql": "SELECT CONSTRAINT_NAME\nFROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS\nWHERE TABLE_SCHEMA = 'student_manage'\n  AND TABLE_NAME = 'Enrollment'\n  AND CONSTRAINT_TYPE = 'UNIQUE'"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 163,
+                "end": 169,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "ba945f99-6f40-4b3e-92dc-241d7afee26e"
+                    ]
+                },
+                "currentHeight": 91,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 190
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 190,
+                            "length": 2
+                        },
+                        "contentStart": 189,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "ba945f99-6f40-4b3e-92dc-241d7afee26e",
+                    "rows": [
+                        {
+                            "0": "StudentID"
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "CONSTRAINT_NAME",
+                            "field": "0",
+                            "dataType": {
+                                "type": 17
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 1 record retrieved in 1.001ms"
+                    },
+                    "totalRowCount": 1,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 0,
+                    "sql": "SELECT DISTINCT CONSTRAINT_NAME\nFROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS\nWHERE TABLE_SCHEMA = 'student_manage' -- 替换成你的数据库名\n  AND TABLE_NAME = 'Enrollment'\n  AND CONSTRAINT_TYPE = 'UNIQUE'"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 170,
+                "end": 171,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (1553): ClassicSession.run_sql: Cannot drop index 'StudentID': needed in a foreign key constraint",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 42
+                        },
+                        "contentStart": 0,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 172,
+                "end": 173,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "executionInfo": {
+                        "text": "OK, 4 records retrieved in 3.003ms"
+                    },
+                    "text": [
+                        {
+                            "type": 3,
+                            "content": "sql> SHOW INDEX FROM Enrollment;\n+------------+------------+-----------+--------------+--------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+\n| Table      | Non_unique | Key_name  | Seq_in_index | Column_name  | Collation | Cardinality | Sub_part | Packed | Null | Index_type | Comment | Index_comment | Visible | Expression |\n+------------+------------+-----------+--------------+--------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+\n| enrollment |          0 | PRIMARY   |            1 | EnrollmentID | A         |           2 |     null | null   |      | BTREE      |         |               | YES     | null       |\n| enrollment |          0 | StudentID |            1 | StudentID    | A         |           1 |     null | null   | YES  | BTREE      |         |               | YES     | null       |\n| enrollment |          0 | StudentID |            2 | CourseID     | A         |           2 |     null | null   | YES  | BTREE      |         |               | YES     | null       |\n| enrollment |          1 | CourseID  |            1 | CourseID     | A         |           2 |     null | null   | YES  | BTREE      |         |               | YES     | null       |\n+------------+------------+-----------+--------------+--------------+-----------+-------------+----------+--------+------+------------+---------+---------------+---------+------------+\n"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 27
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 27,
+                            "length": 1
+                        },
+                        "contentStart": 26,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 174,
+                "end": 176,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 0,
+                            "index": 0,
+                            "content": "MySQL Error (1553): ClassicSession.run_sql: Cannot drop index 'StudentID': needed in a foreign key constraint",
+                            "language": "ansi"
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": ""
+                    }
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 46
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 46,
+                            "length": 1
+                        },
+                        "contentStart": 45,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 177,
+                "end": 177,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "f1d0fd30-c8c0-4210-e7cb-5fdeb9018730"
+                    ]
+                },
+                "currentHeight": 36,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 28
+                        },
+                        "contentStart": 0,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "f1d0fd30-c8c0-4210-e7cb-5fdeb9018730",
+                    "rows": [
+                        {
+                            "0": "Enrollment",
+                            "1": "CREATE TABLE `enrollment` (\n  `EnrollmentID` int NOT NULL AUTO_INCREMENT,\n  `StudentID` varchar(255) DEFAULT NULL,\n  `CourseID` int DEFAULT NULL,\n  `Semester` varchar(255) DEFAULT NULL,\n  `Grade` varchar(10) DEFAULT NULL,\n  PRIMARY KEY (`EnrollmentID`),\n  UNIQUE KEY `StudentID` (`StudentID`,`CourseID`),\n  KEY `CourseID` (`CourseID`),\n  CONSTRAINT `enrollment_ibfk_1` FOREIGN KEY (`StudentID`) REFERENCES `student` (`StudentID`) ON DELETE CASCADE ON UPDATE CASCADE,\n  CONSTRAINT `enrollment_ibfk_2` FOREIGN KEY (`CourseID`) REFERENCES `course` (`CourseID`) ON DELETE CASCADE ON UPDATE CASCADE\n) ENGINE=InnoDB AUTO_INCREMENT=11 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci"
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "Table",
+                            "field": "0",
+                            "dataType": {
+                                "type": 17
+                            }
+                        },
+                        {
+                            "title": "Create Table",
+                            "field": "1",
+                            "dataType": {
+                                "type": 17
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 1 record retrieved in 1.996ms"
+                    },
+                    "totalRowCount": 1,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 0,
+                    "sql": "SHOW CREATE TABLE Enrollment"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 178,
+                "end": 183,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "5137bc2d-c79c-4e8c-c1a7-54959c2b7829"
+                    ]
+                },
+                "currentHeight": 115,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 187
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 187,
+                            "length": 1
+                        },
+                        "contentStart": 186,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "5137bc2d-c79c-4e8c-c1a7-54959c2b7829",
+                    "rows": [
+                        {
+                            "0": "enrollment_ibfk_1"
+                        },
+                        {
+                            "0": "enrollment_ibfk_2"
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "CONSTRAINT_NAME",
+                            "field": "0",
+                            "dataType": {
+                                "type": 17
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 2 records retrieved in 2.01ms"
+                    },
+                    "totalRowCount": 2,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 0,
+                    "sql": "SELECT CONSTRAINT_NAME\nFROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE\nWHERE TABLE_SCHEMA = 'student_manage' -- 替换成你的数据库名\n  AND TABLE_NAME = 'Enrollment'\n  AND REFERENCED_TABLE_NAME IS NOT NULL"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 184,
+                "end": 189,
+                "language": "mysql",
+                "result": {
+                    "type": "resultIds",
+                    "list": [
+                        "5b4c74df-13c9-4168-988e-d66e11877d14"
+                    ]
+                },
+                "currentHeight": 36,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 247
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 247,
+                            "length": 1
+                        },
+                        "contentStart": 246,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": [
+                {
+                    "tabId": "25310edc-79e3-4de8-b016-53112619136e",
+                    "resultId": "5b4c74df-13c9-4168-988e-d66e11877d14",
+                    "rows": [
+                        {
+                            "0": "enrollment_ibfk_1",
+                            "1": "StudentID",
+                            "2": "student",
+                            "3": "StudentID"
+                        },
+                        {
+                            "0": "enrollment_ibfk_2",
+                            "1": "CourseID",
+                            "2": "course",
+                            "3": "CourseID"
+                        }
+                    ],
+                    "columns": [
+                        {
+                            "title": "CONSTRAINT_NAME",
+                            "field": "0",
+                            "dataType": {
+                                "type": 17
+                            }
+                        },
+                        {
+                            "title": "COLUMN_NAME",
+                            "field": "1",
+                            "dataType": {
+                                "type": 17
+                            }
+                        },
+                        {
+                            "title": "REFERENCED_TABLE_NAME",
+                            "field": "2",
+                            "dataType": {
+                                "type": 17
+                            }
+                        },
+                        {
+                            "title": "REFERENCED_COLUMN_NAME",
+                            "field": "3",
+                            "dataType": {
+                                "type": 17
+                            }
+                        }
+                    ],
+                    "executionInfo": {
+                        "text": "OK, 2 records retrieved in 1.002ms"
+                    },
+                    "totalRowCount": 2,
+                    "hasMoreRows": false,
+                    "currentPage": 0,
+                    "index": 0,
+                    "sql": "SELECT CONSTRAINT_NAME, COLUMN_NAME, REFERENCED_TABLE_NAME, REFERENCED_COLUMN_NAME\nFROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE\nWHERE TABLE_SCHEMA = 'student_manage' -- 替换成你的数据库名\n  AND TABLE_NAME = 'Enrollment'\n  AND REFERENCED_TABLE_NAME IS NOT NULL"
+                }
+            ]
+        },
+        {
+            "state": {
+                "start": 190,
+                "end": 190,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "33aa21f7-5f60-4bdb-e5ef-f252e90967f0",
+                            "content": "OK, 0 records retrieved in 20.108ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 59
+                        },
+                        "contentStart": 0,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 191,
+                "end": 192,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "7f9cca8b-8aa7-4f22-d952-7775bfaafc39",
+                            "content": "OK, 0 records retrieved in 28.269ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 46
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 46,
+                            "length": 1
+                        },
+                        "contentStart": 45,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 193,
+                "end": 196,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "cbce0b31-0da2-428a-f566-ede17189c5b5",
+                            "content": "OK, 2 rows affected in 125.062ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 147
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 147,
+                            "length": 1
+                        },
+                        "contentStart": 146,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 197,
+                "end": 223,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 1,
+                            "resultId": "b71b0aac-ed9a-45a0-c484-526248744a27",
+                            "content": "OK, 0 records retrieved in 14.997ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 0,
+                            "length": 12
+                        },
+                        "contentStart": 0,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 12,
+                            "length": 713
+                        },
+                        "contentStart": 14,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 725,
+                            "length": 12
+                        },
+                        "contentStart": 726,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 737,
+                            "length": 2
+                        },
+                        "contentStart": 736,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 224,
+                "end": 261,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 1,
+                            "resultId": "ea9ac930-dcd2-4448-e126-b9c8f2afdf9c",
+                            "content": "OK, 0 records retrieved in 12.59ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 0,
+                            "length": 12
+                        },
+                        "contentStart": 0,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 12,
+                            "length": 840
+                        },
+                        "contentStart": 14,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 852,
+                            "length": 12
+                        },
+                        "contentStart": 853,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 864,
+                            "length": 4
+                        },
+                        "contentStart": 863,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 262,
+                "end": 264,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "aaf7e9a9-0292-4bf5-c9fa-ef7413ddac48",
+                            "content": "OK, 0 records retrieved in 2.4527947902679443s"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 56
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 56,
+                            "length": 1
+                        },
+                        "contentStart": 55,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 265,
+                "end": 271,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "02fb8fab-4027-4c41-ff81-f6a084df7128",
+                            "content": "OK, 3 rows affected in 10.861ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 115
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 115,
+                            "length": 1
+                        },
+                        "contentStart": 114,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 272,
+                "end": 291,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 1,
+                            "resultId": "7f97a26a-10e4-4c79-d359-da5c7b5d3595",
+                            "content": "OK, 0 records retrieved in 15.149ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 0,
+                            "length": 12
+                        },
+                        "contentStart": 0,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 12,
+                            "length": 341
+                        },
+                        "contentStart": 14,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 353,
+                            "length": 12
+                        },
+                        "contentStart": 354,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 365,
+                            "length": 1
+                        },
+                        "contentStart": 364,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 292,
+                "end": 294,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "089e5586-dce7-4d1e-d89e-7925aadc54f0",
+                            "content": "OK, 0 records retrieved in 43.981ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 42
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 42,
+                            "length": 1
+                        },
+                        "contentStart": 41,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 295,
+                "end": 297,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 0,
+                            "resultId": "d5f73e60-83d9-4fc1-e1d2-e2c97d2ef842",
+                            "content": "OK, 0 records retrieved in 18.291ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 49
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 49,
+                            "length": 1
+                        },
+                        "contentStart": 48,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 298,
+                "end": 311,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 1,
+                            "resultId": "a6987ad9-e3c1-45c5-957c-db0eb888d080",
+                            "content": "OK, 0 records retrieved in 14.29ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 0,
+                            "length": 12
+                        },
+                        "contentStart": 0,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 12,
+                            "length": 178
+                        },
+                        "contentStart": 14,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 190,
+                            "length": 12
+                        },
+                        "contentStart": 191,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 202,
+                            "length": 1
+                        },
+                        "contentStart": 201,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 312,
+                "end": 325,
+                "language": "mysql",
+                "result": {
+                    "type": "text",
+                    "text": [
+                        {
+                            "type": 4,
+                            "index": 1,
+                            "resultId": "5c0285f0-7c8e-45d2-9727-11b32bb10411",
+                            "content": "OK, 0 records retrieved in 12.521ms"
+                        }
+                    ]
+                },
+                "currentHeight": 28,
+                "statements": [
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 0,
+                            "length": 12
+                        },
+                        "contentStart": 0,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": "//",
+                        "span": {
+                            "start": 12,
+                            "length": 178
+                        },
+                        "contentStart": 14,
+                        "state": 0
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 190,
+                            "length": 12
+                        },
+                        "contentStart": 191,
+                        "state": 4
+                    },
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 202,
+                            "length": 1
+                        },
+                        "contentStart": 201,
+                        "state": 3
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 326,
+                "end": 326,
+                "language": "mysql",
+                "currentHeight": 180,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 0
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    }
+                ]
+            },
+            "data": []
+        },
+        {
+            "state": {
+                "start": 327,
+                "end": 327,
+                "language": "mysql",
+                "currentHeight": 180,
+                "statements": [
+                    {
+                        "delimiter": ";",
+                        "span": {
+                            "start": 0,
+                            "length": 0
+                        },
+                        "contentStart": 0,
+                        "state": 0
+                    }
+                ]
+            },
+            "data": []
+        }
+    ]
+}
