@@ -86,6 +86,8 @@ def show():
         )
 
         selected = grid_response['selected_rows']
+        if selected is None:
+            selected = pd.DataFrame()
     
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
@@ -93,8 +95,11 @@ def show():
             add_major_dialog()
     
     with col2:
-        if st.button("删除专业信息") and selected:
-            delete_major_dialog(selected.iloc[0])
+        if st.button("删除专业信息"): 
+            if not selected.empty:
+                delete_major_dialog(selected.iloc[0])
+            else :
+                st.error("请选择一个专业信息")
 
     with col3:
         if st.button("刷新"):

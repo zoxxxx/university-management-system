@@ -79,6 +79,8 @@ def show():
         )
 
         selected = grid_response['selected_rows']
+        if selected is None:
+            selected = pd.DataFrame()
     
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
@@ -86,8 +88,11 @@ def show():
             add_college_dialog()
     
     with col2:
-        if st.button("删除学院信息") and not selected.empty:
-            delete_college_dialog(selected.iloc[0])
+        if st.button("删除学院信息"):
+            if selected.empty:
+                st.error("请选择一个学院")
+            else: 
+                delete_college_dialog(selected.iloc[0])
 
     with col3:
         if st.button("刷新"):

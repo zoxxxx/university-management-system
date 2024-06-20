@@ -123,6 +123,8 @@ def show():
         )
 
         selected = grid_response['selected_rows']
+        if selected is None:
+            selected = pd.DataFrame() 
     
     col1, col2, col3 = st.columns([1, 1, 1])
     with col1:
@@ -130,8 +132,11 @@ def show():
             add_enrollment_dialog()
     
     with col2:
-        if st.button("删除选课信息") and not selected.empty:
-            delete_enrollment_dialog(selected.iloc[0])
+        if st.button("删除选课信息"):
+            if selected.empty:
+                st.error("请选择一个选课")
+            else:
+                delete_enrollment_dialog(selected.iloc[0])
 
     with col3:
         if st.button("刷新"):
